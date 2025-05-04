@@ -84,7 +84,7 @@ void A_output(struct msg message)
 
     nextseqnum = (nextseqnum + 1) % SEQSPACE;
   } else {
-    if (TRACE > 0) printf("Window full, message dropped\n");
+    if (TRACE > 0) printf("----A: New message arrives, send window is full\n");
     window_full++;
   }
 }
