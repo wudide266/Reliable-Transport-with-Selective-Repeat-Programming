@@ -35,7 +35,7 @@
 */
 int ComputeChecksum(struct pkt packet)
 {
-  int checksum = 0;
+  int checksum = packet.seqnum + packet.acknum;
   int i;
   for ( i=0; i<20; i++ )
     checksum += (int)(packet.payload[i]);
@@ -54,6 +54,7 @@ static struct pkt buffer[SEQSPACE];  /* array for storing packets waiting for AC
 static bool acked[SEQSPACE]; /*Individual ack tracking */
 static int base;                /* the number of packets currently awaiting an ACK */
 static int nextseqnum;               /* the next sequence number to be used by the sender */
+static bool timer_running = false; /* New flag for timer status*/
 
 /* called from layer 5 (application layer), passed the message to be sent to other side */
 void A_output(struct msg message)
@@ -63,14 +64,18 @@ void A_output(struct msg message)
     int i;
     sendpkt.seqnum = nextseqnum;
     sendpkt.acknum = NOTINUSE;
-    for (i = 0; i < 20; i++) sendpkt.payload[i] = message.data[i];
+    for (i = 0; i < 20; i++) 
+      sendpkt.payload[i] = message.data[i];
     sendpkt.checksum = ComputeChecksum(sendpkt);
 
     buffer[nextseqnum] = sendpkt;
     acked[nextseqnum] = false;
 
     tolayer3(A, sendpkt);
-    if (base == nextseqnum) starttimer(A, RTT); /* Timer tracks the earliest unacked packet */
+    if (base == nextseqnum && !timer_running) {
+      starttimer(A, RTT);
+      timer_running = true;
+    }
 
     nextseqnum = (nextseqnum + 1) % SEQSPACE;
   } else {
@@ -96,9 +101,21 @@ void A_input(struct pkt packet)
       new_ACKs++;
       
       while (acked[base]) {
-        stoptimer(A);
+        acked[base] = false;
         base = (base + 1) % SEQSPACE;
-        if (base != nextseqnum) starttimer(A, RTT);
+      }
+
+      if (base == nextseqnum) {
+        if (timer_running) {
+          stoptimer(A);
+          timer_running = false;
+        }
+      } else {
+        if (timer_running) {
+          stoptimer(A);
+        }
+        starttimer(A, RTT);
+        timer_running = true;
       }
     }
   } else {
@@ -110,10 +127,18 @@ void A_input(struct pkt packet)
 /* called when A's timer goes off */
 void A_timerinterrupt(void)
 {
+  int i;
   if (TRACE > 0) printf("Timeout: retransmitting packet %d\n", base);
-  tolayer3(A, buffer[base]);
-  packets_resent++;
+  
+  for (i = 0; i < WINDOWSIZE; i++) {
+    int idx = (base + i) % SEQSPACE;
+    if (!acked[idx] && ((nextseqnum + SEQSPACE - base) % SEQSPACE > i)) {
+      tolayer3(A, buffer[idx]);
+      packets_resent++;
+    }
+  }
   starttimer(A, RTT);
+  timer_running = true;
 }
 
 
@@ -125,6 +150,7 @@ void A_init(void)
   int i;
   base = 0;
   nextseqnum = 0;
+  timer_running = false;
   for (i = 0; i < SEQSPACE; i++) acked[i] = false;
 }
 
@@ -148,7 +174,8 @@ void B_input(struct pkt packet)
     ackpkt.seqnum = seqnum;
     ackpkt.acknum = seqnum;
     
-    for (i = 0; i < 20; i++) ackpkt.payload[i] = '0';
+    for (i = 0; i < 20; i++) 
+      ackpkt.payload[i] = '0';
     ackpkt.checksum = ComputeChecksum(ackpkt);
 
     tolayer3(B, ackpkt); /* Send immediate ACK */
