@@ -87,14 +87,23 @@ void A_input(struct pkt packet)
 {
   if (!IsCorrupted(packet)) {
     int acknum = packet.acknum;
+
+    if (TRACE > 0)
+      printf("[A_input] ACK %d received\n", acknum);
+
     if (!acked[acknum]) {
       acked[acknum] = true;
+      new_ACKs++;
+      
       while (acked[base]) {
         stoptimer(A);
         base = (base + 1) % SEQSPACE;
         if (base != nextseqnum) starttimer(A, RTT);
       }
     }
+  } else {
+    if (TRACE > 0)
+      printf("[A_input] Corrupted ACK received\n");
   }
 }
 
@@ -135,8 +144,10 @@ void B_input(struct pkt packet)
     int seqnum = packet.seqnum;
     struct pkt ackpkt;
     int i;
+    
+    ackpkt.seqnum = seqnum;
     ackpkt.acknum = seqnum;
-    ackpkt.seqnum = NOTINUSE;
+    
     for (i = 0; i < 20; i++) ackpkt.payload[i] = '0';
     ackpkt.checksum = ComputeChecksum(ackpkt);
 
