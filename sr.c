@@ -127,7 +127,7 @@ void A_input(struct pkt packet)
     }
   } else {
     if (TRACE > 0)
-      printf("----A: corrupted ACK is received\n");
+      printf("----A: corrupted ACK is received, do nothing!\n");
   }
 }
 
@@ -135,7 +135,7 @@ void A_input(struct pkt packet)
 void A_timerinterrupt(void)
 {
   int i;
-  if (TRACE > 0) printf("----A: time-out,resend packets!\n");
+  if (TRACE > 0) printf("----A: time out,resend packets!\n");
   
   for (i = 0; i < WINDOWSIZE; i++) {
     int idx = (base + i) % SEQSPACE;
@@ -202,7 +202,7 @@ void B_input(struct pkt packet)
     }
   } else {
     if (TRACE > 0)
-      printf("----B: corrupted packet %d is received\n", packet.seqnum);
+      printf("----B: packet corrupted or not expected sequence number, resend ACK!\n");
   }
 }
 
